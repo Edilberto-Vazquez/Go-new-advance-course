@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -19,6 +20,7 @@ type FunctionResult struct {
 type Memory struct {
 	f     Function               // campo para almacenar la funcion
 	cache map[int]FunctionResult // campo para almacenar los datos que ya se calcularon previamente
+	lock  sync.Mutex
 }
 
 // funcion que crea un nuevo sistema de cache que apunta a Memory
@@ -39,10 +41,14 @@ func NewCache(f Function) *Memory {
 	return: un generico y un error
 */
 func (m *Memory) Get(key int) (interface{}, error) {
+	m.lock.Lock()
 	result, exist := m.cache[key]
+	m.lock.Unlock()
 	if !exist {
+		m.lock.Lock()
 		result.value, result.err = m.f(key)
 		m.cache[key] = result
+		m.lock.Unlock()
 	}
 	return result.value, result.err
 }
@@ -67,13 +73,19 @@ func Fibonacci(n int) int {
 
 func main() {
 	cache := NewCache(GetFibonnaci)
-	fibo := []int{40, 40, 10, 25, 31, 31}
+	fibo := []int{15, 23, 31, 7, 36, 15, 43, 8, 17, 23}
+	var wg sync.WaitGroup
 	for _, v := range fibo {
-		start := time.Now()
-		value, err := cache.Get(v)
-		if err != nil {
-			log.Println(err)
-		}
-		fmt.Printf("%d, %s, %d\n", v, time.Since(start), value)
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			start := time.Now()
+			value, err := cache.Get(index)
+			if err != nil {
+				log.Println(err)
+			}
+			fmt.Printf("%d, %s, %d\n", index, time.Since(start), value)
+		}(v)
 	}
+	wg.Wait()
 }
